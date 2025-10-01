@@ -186,16 +186,14 @@
                 this.container = document.getElementById('canvas-container');
 
 
-                this.simpleEdgeColor = new THREE.Color(0x333333);
+                this.simpleEdgeColor = null;
                 
-                let cssHoverGlowColor = this.computedStyle('--shadow-hover-blue-light');
-                if (!cssHoverGlowColor) cssHoverGlowColor = '#38bdf8';
-                this.hoverGlowColor = new THREE.Color(cssHoverGlowColor);
+                this.hoverGlowColor = null;
 
                 this.currentCoinScale = 1;
                 this.targetCoinScale = 1;
-                this.currentEmissiveColor = new THREE.Color(0x000000);
-                this.targetEmissiveColor = new THREE.Color(0x000000);
+                this.currentEmissiveColor = null;
+                this.targetEmissiveColor = null;
                 this.currentEmissiveIntensity = 0;
                 this.targetEmissiveIntensity = 0;
                 this.hoverAnimationSpeed = 0.1;
@@ -221,6 +219,17 @@
 
             init() {
                 this.loadAssets().then(() => {
+                    
+                    this.simpleEdgeColor = new THREE.Color(0x333333);       
+                    let cssHoverGlowColor = this.computedStyle('--shadow-hover-blue-light');
+                    if (!cssHoverGlowColor) cssHoverGlowColor = '#38bdf8';
+                    this.hoverGlowColor = new THREE.Color(cssHoverGlowColor);
+
+                    this.currentEmissiveColor = new THREE.Color(0x000000);
+                    this.targetEmissiveColor = new THREE.Color(0x000000);
+
+                    this.flipDuration = parseFloat(this.computedStyle('--flip-duration')) * 1000;
+                    
                     this.createScene();
                     this.createCamera();
                     this.createRenderer();
@@ -228,13 +237,6 @@
                     this.createCoin();
                     this.createParticles();
                     this.setupEventListeners();
-
-                    this.currentEmissiveColor.set(0x000000); 
-                    this.targetEmissiveColor.set(0x000000);
-                    this.currentEmissiveIntensity = 0;
-                    this.targetEmissiveIntensity = 0;
-
-                    this.flipDuration = parseFloat(this.computedStyle('--flip-duration')) * 1000;
 
                     setTimeout(() => {
                         document.getElementById('loading').style.display = 'none';
