@@ -276,7 +276,7 @@
 
             createScene() {
                 this.scene = new THREE.Scene();
-				this.scene.background = null;
+                this.scene.background = null;
             }
 
             createCamera() {
@@ -584,12 +584,12 @@
                 });
                 if (yearsText) innerGroup.add(yearsText);
 
-                const orlandoText = this.createCentralText("ORLANDO &", 0, -0.26, 0.03, textColorDark, 0.065, this.primary_font, {
+                const floridaText = this.createCentralText("FLORIDA &", 0, -0.26, 0.03, textColorDark, 0.065, this.primary_font, {
                     bevelThickness: 0.003,
                     bevelSize: 0.002,
                     bevelSegments: 2
                 });
-                if (orlandoText) innerGroup.add(orlandoText);
+                if (floridaText) innerGroup.add(floridaText);
 
                 const surroundingText = this.createCentralText("SURROUNDING", 0, -0.36, 0.02, textColorDark, 0.065, this.primary_font, {
                     bevelThickness: 0.003,
@@ -598,12 +598,12 @@
                 });
                 if (surroundingText) innerGroup.add(surroundingText);
 
-                const citiesText = this.createCentralText("CITIES", 0, -0.46, 0.01, textColorDark, 0.065, this.primary_font, {
+                const areasText = this.createCentralText("AREAS", 0, -0.46, 0.01, textColorDark, 0.065, this.primary_font, {
                     bevelThickness: 0.003,
                     bevelSize: 0.002,
                     bevelSegments: 2
                 });
-                if (citiesText) innerGroup.add(citiesText);
+                if (areasText) innerGroup.add(areasText);
 
                 parentGroup.add(innerGroup);
             }
@@ -660,7 +660,7 @@
             }
 
             createCurvedTextElements(faceContentGroup) {
-                const topText = "20 YEARS ORLANDO & SURROUNDING CITIES";
+                const topText = "20 YEARS FLORIDA & SURROUNDING AREAS";
                 const bottomStarsText = "\uF005\uF005\uF005\uF005\uF005"; 
                 
                 const topTextRadius = 0.765; 
