@@ -1,25 +1,29 @@
-3D Interactive Coin with Three.js
+# 3D Interactive Coin with Three.js
 
 A beautiful, interactive 3D flipping coin with smooth animations, particle effects, and engaging interactions.
 
-✨ Features
-3D Dual-Sided Coin with custom designs
+## ✨ Features
 
-Smooth Flip Animation on click/tap
+- **3D Dual-Sided Coin** with custom designs
+- **Smooth Flip Animation** on click/tap
+- **Parallax Effects** with mouse movement
+- **Particle System** with custom shaders
+- **Counting Animation** on coin face
+- **Fully Responsive** for all devices
 
-Parallax Effects with mouse movement
+## 🚀 Live Demo & Guide
 
-Particle System with custom shaders
+**Article:** [Dev.to Guide](https://dev.to/your-username/building-an-interactive-3d-flipping-coin-with-threejs-complete-guide)  
+**Live Demo:** [CodePen](https://codepen.io/Shahibur-Rahman/pen/myVryeK)
 
-Counting Animation on coin face
+## 🛠️ Quick Start
 
-Fully Responsive for all devices
+Simply open `index.html` in your browser to see the coin in action!
 
-🚀 Live Demo & Guide
+## 📄 License
 
-Article: [Dev.to Guide]()
+MIT License - feel free to use in your projects!
 
-Live Demo: [CodePen](https://codepen.io/Shahibur-Rahman/pen/zxrqpGz)
+---
 
-
-Star this repo if you find it helpful! ⭐
+**Star this repo if you find it helpful!** ⭐
