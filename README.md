@@ -1,4 +1,5 @@
-#3D Interactive Coin with Three.js
+3D Interactive Coin with Three.js
+
 A beautiful, interactive 3D flipping coin with smooth animations, particle effects, and engaging interactions.
 
 ✨ Features
