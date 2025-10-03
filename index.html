@@ -167,691 +167,691 @@
     </div>
 
     <script>
-        class InteractiveCoin {
-            constructor() {
-                this.scene = null;
-                this.camera = null;
-                this.renderer = null;
-                this.coin = null;
-                this.edgeMesh = null;
-                this.particles = null;
-                this.particlesData = [];
-                this.isFlipped = false;
-                this.isAnimating = false;
-                this.targetRotationX = 0;
-                this.targetRotationY = 0;
-                this.container = document.getElementById('canvas-container');
-
-
-                this.simpleEdgeColor = null;
-                
-                this.hoverGlowColor = null;
-
-                this.currentCoinScale = 1;
-                this.targetCoinScale = 1;
-                this.currentEmissiveColor = null;
-                this.targetEmissiveColor = null;
-                this.currentEmissiveIntensity = 0;
-                this.targetEmissiveIntensity = 0;
-                this.hoverAnimationSpeed = 0.1;
-
-                this.breathingTimer = 0;
-                this.stars = [];
-
-                this.isFlipping = false;
-                this.flipStartTime = 0;
-                this.flipDuration = 0;
-                this.flipStartRotationY = 0;
-                this.flipEndRotationY = 0;
-
-                this.primary_font = null; 
-                
-                this.countTextMesh = null;
-                this.currentCount = 1;
-                this.targetCount = 20;
-                this.countIntervalId = null;
-              
-                this.init();
-            }
-
-            init() {
-                this.loadAssets().then(() => {
-                    
-                    this.simpleEdgeColor = new THREE.Color(0x333333);       
-                    let cssHoverGlowColor = this.computedStyle('--shadow-hover-blue-light');
-                    if (!cssHoverGlowColor) cssHoverGlowColor = '#38bdf8';
-                    this.hoverGlowColor = new THREE.Color(cssHoverGlowColor);
-
-                    this.currentEmissiveColor = new THREE.Color(0x000000);
-                    this.targetEmissiveColor = new THREE.Color(0x000000);
-
-                    this.flipDuration = parseFloat(this.computedStyle('--flip-duration')) * 1000;
-                    
-                    this.createScene();
-                    this.createCamera();
-                    this.createRenderer();
-                    this.createLighting();
-                    this.createCoin();
-                    this.createParticles();
-                    this.setupEventListeners();
-
-                    setTimeout(() => {
-                        document.getElementById('loading').style.display = 'none';
-                    }, 100);
-
-                    this.animate();
-                });
-            }
-
-            loadAssets() {
-                const fontLoader = new THREE.FontLoader();
-                const primaryFontUrl = 'https://cdn.jsdelivr.net/npm/@compai/font-inter@latest/data/typefaces/normal-800.json';
-                const fallbackFontUrl = 'https://threejs.org/examples/fonts/helvetiker_regular.typeface.json'; 
-
-                return new Promise((resolve) => {
-                    fontLoader.load(primaryFontUrl, (font) => {
-                        this.primary_font = font;
-                        resolve();
-                    }, 
-                    () => {}, 
-                    (error) => {
-                        console.warn("Failed to load primary font (Inter). Attempting fallback font.", error);
-                        fontLoader.load(fallbackFontUrl, (font) => {
-                            this.primary_font = font;
-                            resolve();
-                        },
-                        () => {},
-                        (error) => {
-                            console.error("Failed to load fallback font (Helvetiker). Text will not render.", error);
-                            this.primary_font = null;
-                            resolve();
-                        });
-                    });
-                });
-            }
-
-            computedStyle(styVar){
-                return getComputedStyle(document.documentElement).getPropertyValue(styVar).trim();
-            }
-
-            createScene() {
-                this.scene = new THREE.Scene();
-                this.scene.background = null;
-            }
-
-            createCamera() {
-                const fov = 45;
-                const aspect = this.container.clientWidth / this.container.clientHeight;
-                this.camera = new THREE.PerspectiveCamera(fov, aspect, 0.1, 1000);
-                this.updateCameraPosition();
-            }
-
-            createRenderer() {
-                this.renderer = new THREE.WebGLRenderer({ 
-                    antialias: true,
-                    alpha: true
-                });
-                this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
-                this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-                this.container.appendChild(this.renderer.domElement);
-            }
-
-            createLighting() {
-                const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-                this.scene.add(ambientLight);
-
-                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-                directionalLight.position.set(3, 3, 3);
-                this.scene.add(directionalLight);
-
-                const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
-                fillLight.position.set(-3, -3, 2);
-                this.scene.add(fillLight);
-            }
-
-            createCoinEdge(radius, thickness, color) {
-                const edgeGeometry = new THREE.CylinderGeometry(
-                    radius,
-                    radius,
-                    thickness,
-                    64,
-                    1,
-                    true
-                );
-
-                const edgeMaterial = new THREE.MeshPhongMaterial({
-                    color: color,
-                    side: THREE.FrontSide,
-                    shininess: 30,
-                });
-
-                const edgeMesh = new THREE.Mesh(edgeGeometry, edgeMaterial);
-                
-                edgeMesh.rotation.x = Math.PI / 2; 
-
-                return edgeMesh;
-            }
-
-            createCoin() {
-                const coinGroup = new THREE.Group();
-                
-                const coinRadius = 1.0;
-                const coinThickness = 0.16;
-                const faceZOffset = coinThickness / 2;
-
-                this.createCoinFaceContent(coinGroup, faceZOffset, false);
-                this.createCoinFaceContent(coinGroup, -faceZOffset, true);
-                
-                this.edgeMesh = this.createCoinEdge(
-                    coinRadius, 
-                    coinThickness, 
-                    this.simpleEdgeColor
-                ); 
-                coinGroup.add(this.edgeMesh);
-                
-                this.coin = coinGroup;
-                this.coin.rotation.x = Math.PI / 2;
-                this.scene.add(this.coin);
-            }
-
-            createEdgeTexture() {
-                const canvasHeight = 128;
-                const canvasWidth = 512;
-                const segmentHeight = canvasHeight / 3;
-
-                const canvas = document.createElement('canvas');
-                canvas.width = canvasWidth;
-                canvas.height = canvasHeight;
-                const context = canvas.getContext('2d');
-
-                const gradients = [
-                    ['#9a9a9a', '#7a7a7a', '#5a5a5a', '#7a7a7a', '#9a9a9a'],
-                    ['#8a8a8a', '#6a6a6a', '#4a4a4a', '#6a6a6a', '#8a8a8a'],
-                    ['#7a7a7a', '#5a5a5a', '#3a3a3a', '#5a5a5a', '#7a7a7a']
-                ];
-
-                for (let i = 0; i < 3; i++) {
-                    const gradient = context.createLinearGradient(0, 0, canvasWidth, 0);
-                    gradient.addColorStop(0, gradients[i][0]);
-                    gradient.addColorStop(0.3, gradients[i][1]);
-                    gradient.addColorStop(0.5, gradients[i][2]);
-                    gradient.addColorStop(0.7, gradients[i][3]);
-                    gradient.addColorStop(1, gradients[i][4]);
-                    context.fillStyle = gradient;
-                    context.fillRect(0, i * segmentHeight, canvasWidth, segmentHeight);
-                }
-                const texture = new THREE.CanvasTexture(canvas);
-                texture.wrapS = THREE.RepeatWrapping;
-                texture.wrapT = THREE.RepeatWrapping;
-                texture.repeat.set(2, 1);
-                return texture;
-            }
-
-            createCoinFaceContent(coinGroup, zPosition, isBack) {
-                const faceContentGroup = new THREE.Group();
-                faceContentGroup.position.z = zPosition;
-                if (isBack) {
-                    faceContentGroup.rotation.y = Math.PI;
-                }
-
-                const faceGeometry = new THREE.CircleGeometry(0.95, 64);
-                const faceTexture = this.createFaceTexture();
-                const faceMaterial = new THREE.MeshPhongMaterial({
-                    map: faceTexture,
-                    shininess: 60,
-                    side: THREE.FrontSide
-                });
-                const face = new THREE.Mesh(faceGeometry, faceMaterial);
-                faceContentGroup.add(face);
-
-                const outerRingGeometry = new THREE.RingGeometry(0.95, 1.0, 64);
-                const outerRingMaterial = new THREE.MeshBasicMaterial({
-                    color: 0xffffff,
-                    side: THREE.FrontSide
-                });
-                const outerRing = new THREE.Mesh(outerRingGeometry, outerRingMaterial);
-                outerRing.position.z = 0.001;
-                faceContentGroup.add(outerRing);
-
-                this.createInnerContent(faceContentGroup, isBack);
-                this.createCurvedTextElements(faceContentGroup);
-                
-                coinGroup.add(faceContentGroup);
-            }
-
-            createFaceTexture() {
-                const canvasSize = 512;
-                const canvas = document.createElement('canvas');
-                canvas.width = canvasSize;
-                canvas.height = canvasSize;
-                const context = canvas.getContext('2d');
-
-                const gradient = context.createLinearGradient(0, 0, 0, canvasSize);
-                gradient.addColorStop(0, this.computedStyle('--coin-gradient-start'));
-                gradient.addColorStop(0.634, this.computedStyle('--coin-gradient-start'));
-                gradient.addColorStop(0.634, this.computedStyle('--coin-gradient-end'));
-                gradient.addColorStop(1, this.computedStyle('--coin-gradient-end'));
-
-                context.fillStyle = gradient;
-                context.fillRect(0, 0, canvas.width, canvas.height);
-
-                const arrowFillColor = this.computedStyle('--text-color-dark');
-                const arrowStrokeColor = 'white';
-                const arrowStrokeWidth = 9;
-                const svgViewboxSize = 380;
-                const s = canvasSize / svgViewboxSize;
-
-                const drawArrowShape = (ctx) => {
-                    ctx.beginPath();
-                    ctx.moveTo(5 * s, 229 * s);
-                    ctx.lineTo(42 * s, 271 * s);
-                    ctx.lineTo(93 * s, 252 * s);
-                    ctx.closePath();
-                    ctx.fillStyle = arrowFillColor;
-                    ctx.fill();
-
-                    ctx.beginPath();
-                    ctx.moveTo(5 * s, 232 * s);
-                    ctx.lineTo(43 * s, 271 * s);
-                    ctx.lineTo(83 * s, 252 * s);
-                    ctx.strokeStyle = arrowStrokeColor;
-                    ctx.lineWidth = arrowStrokeWidth * s;
-                    ctx.lineJoin = 'miter';
-                    ctx.lineCap = 'butt';
-                    ctx.stroke();
-                };
-
-                context.save();
-                context.translate(46 * s, 262 * s);
-                context.rotate(-18 * (Math.PI / 180));
-                context.translate(-42 * s, -262 * s);
-                drawArrowShape(context);
-                context.restore();
-
-                context.save();
-                context.translate(canvasSize, 0);
-                context.scale(-1, 1);
-                context.translate(46 * s, 262 * s);
-                context.rotate(-18 * (Math.PI / 180));
-                context.translate(-42 * s, -262 * s);
-                drawArrowShape(context);
-                context.restore();
-
-                return new THREE.CanvasTexture(canvas);
-            }
-
-            createCentralText(text, x, yOffset, zOffset, color, size, fontObject, bevelOptions = {}) {
-                if (!fontObject) {
-                    console.warn("Font not loaded. Skipping text creation for:", text);
-                    return null; 
-                }
-
-                const textColor = new THREE.Color(color);
-                
-                const height = size * 0.15;
-                const bevelThickness = bevelOptions.bevelThickness || size * 0.03;
-                const totalDepth = height + bevelThickness;
-                const zTranslate = -totalDepth / 2;
-
-                const textGeometry = new THREE.TextGeometry(text, {
-                    font: fontObject,
-                    size: size,
-                    height: height,
-                    curveSegments: 8,
-                    bevelEnabled: true,
-                    bevelThickness: bevelThickness,
-                    bevelSize: bevelOptions.bevelSize || size * 0.02,
-                    bevelSegments: bevelOptions.bevelSegments || 3
-                });
-                
-                textGeometry.computeBoundingBox();
-                textGeometry.center();
-                textGeometry.translate(0, 0, zTranslate);
-                
-                const material = new THREE.MeshPhongMaterial({
-                    color: textColor,
-                    specular: 0xffffff,
-                    shininess: 60,
-                    flatShading: false
-                });
-                
-                const textMesh = new THREE.Mesh(textGeometry, material);
-                textMesh.position.set(x, yOffset, zOffset); 
-                
-                return textMesh;
-            }
-
-            createInnerContent(parentGroup, isBack) {
-                const innerGroup = new THREE.Group();
-                innerGroup.position.z = 0.002;
-
-                const innerContentRadius = 0.5789;
-                const innerBorderWidth = 4 / 190;
-
-                const innerCircleGeometry = new THREE.CircleGeometry(innerContentRadius, 64);
-                const innerCircleMaterial = new THREE.MeshPhongMaterial({
-                    color: new THREE.Color(this.computedStyle('--inner-content-bg-light')),
-                    shininess: 50,
-                    specular: 0xaaaaaa,
-                    side: THREE.FrontSide
-                });
-                const innerCircle = new THREE.Mesh(innerCircleGeometry, innerCircleMaterial);
-                innerGroup.add(innerCircle);
-
-                const innerBorderGeometry = new THREE.RingGeometry(innerContentRadius - innerBorderWidth, innerContentRadius + innerBorderWidth, 32);
-                const innerBorderMaterial = new THREE.MeshPhongMaterial({
-                    color: new THREE.Color(this.computedStyle('--inner-content-border')),
-                    shininess: 30,
-                    side: THREE.FrontSide
-                });
-                const innerBorder = new THREE.Mesh(innerBorderGeometry, innerBorderMaterial);
-                innerBorder.position.z = 0.001;
-                innerGroup.add(innerBorder);
-
-                const textColorDark = this.computedStyle('--text-color-dark');
-
-                let initialText = this.currentCount.toString();
-                let shouldStartAnimation = false;
-
-                if (isBack) {
-                    initialText = this.targetCount.toString();
-                } else {
-                    initialText = '1';
-                    shouldStartAnimation = true;
-                }
-
-                const centralTextMesh = this.createCentralText(initialText, 0, 0.21, 0.05, textColorDark, 0.42, this.primary_font, {
-                    bevelThickness: 0.008,
-                    bevelSize: 0.005,
-                    bevelSegments: 4
-                });
-
-                if (centralTextMesh) {
-                    if (shouldStartAnimation) {
-                        this.countTextMesh = centralTextMesh;
-                    }
-                    innerGroup.add(centralTextMesh);
-                }
-                
-                if (shouldStartAnimation) {
-                    this.startCountAnimation(innerGroup);
-                }
-
-                const yearsText = this.createCentralText("YEARS", 0, -0.12, 0.04, textColorDark, 0.14, this.primary_font, {
-                    bevelThickness: 0.005,
-                    bevelSize: 0.003,
-                    bevelSegments: 3
-                });
-                if (yearsText) innerGroup.add(yearsText);
-
-                const nyText = this.createCentralText("NEW YORK &", 0, -0.26, 0.03, textColorDark, 0.065, this.primary_font, {
-                    bevelThickness: 0.003,
-                    bevelSize: 0.002,
-                    bevelSegments: 2
-                });
-                if (nyText) innerGroup.add(nyText);
-
-                const surroundingText = this.createCentralText("SURROUNDING", 0, -0.36, 0.02, textColorDark, 0.065, this.primary_font, {
-                    bevelThickness: 0.003,
-                    bevelSize: 0.002,
-                    bevelSegments: 2
-                });
-                if (surroundingText) innerGroup.add(surroundingText);
-
-                const areasText = this.createCentralText("AREAS", 0, -0.46, 0.01, textColorDark, 0.065, this.primary_font, {
-                    bevelThickness: 0.003,
-                    bevelSize: 0.002,
-                    bevelSegments: 2
-                });
-                if (areasText) innerGroup.add(areasText);
-
-                parentGroup.add(innerGroup);
-            }
-
-            startCountAnimation(parentGroupForCountText) {
-                if (!this.primary_font) {
-                    console.warn("Font not loaded, cannot start count animation.");
-                    return;
-                }
-
-                this.currentCount = 1;
-                const animationDuration = 3000;
-                const totalIncrements = this.targetCount - this.currentCount;
-                const intervalTime = animationDuration / totalIncrements;
-
-                this.countIntervalId = setInterval(() => {
-                    if (this.currentCount < this.targetCount) {
-                        this.currentCount++;
-                        this.updateCountTextMesh(parentGroupForCountText);
-                    } else {
-                        clearInterval(this.countIntervalId);
-                        this.countIntervalId = null;
-                    }
-                }, intervalTime);
-            }
-
-
-            updateCountTextMesh(parentGroupForCountText) {
-                if (!this.countTextMesh || !this.primary_font) {
-                    return;
-                }
-
-                parentGroupForCountText.remove(this.countTextMesh);
-                
-                if (this.countTextMesh.geometry) {
-                    this.countTextMesh.geometry.dispose();
-                }
-                if (this.countTextMesh.material) {
-                    this.countTextMesh.material.dispose();
-                }
-                this.countTextMesh = null; 
-
-                const textColorDark = this.computedStyle('--text-color-dark');
-                const newTextMesh = this.createCentralText(this.currentCount.toString(), 0, 0.21, 0.05, textColorDark, 0.42, this.primary_font, {
-                    bevelThickness: 0.008,
-                    bevelSize: 0.005,
-                    bevelSegments: 4
-                });
-
-                if (newTextMesh) {
-                    this.countTextMesh = newTextMesh;
-                    parentGroupForCountText.add(this.countTextMesh);
-                }
-            }
-
-            createCurvedTextElements(faceContentGroup) {
-                const topText = "20 YEARS NEW YORK & SURROUNDING AREAS";
-                const bottomStarsText = "\uF005\uF005\uF005\uF005\uF005"; 
-                
-                const topTextRadius = 0.765; 
-                const bottomStarsRadius = 0.7263; 
-
-                const topTextStartAngle = Math.PI * (160 / 180); 
-                const topTextEndAngle = Math.PI * (25 / 180);   
-
-                this.generateCurvedTextMesh(
-                    faceContentGroup, 
-                    topText, 
-                    topTextRadius, 
-                    topTextStartAngle,
-                    topTextEndAngle,
-                    0.05,
-                    new THREE.Color(this.computedStyle('--text-color-light')).getHex(), 
-                    this.primary_font, 
-                    0.32,
-                    1.2
-                );
-                
-                this.generateCurvedCharacterMeshes(
-                    faceContentGroup, 
-                    bottomStarsText, 
-                    bottomStarsRadius, 
-                    Math.PI * 1.5,
-                    Math.PI * 0.45,
-                    0.06,
-                    new THREE.Color(this.computedStyle('--star-color-default')).getHex(), 
-                    '900 90px "Font Awesome 6 Free"',
-                    0.11,
-                    true
-                );
-            }
-
-            generateCurvedCharacterMeshes(parentGroup, text, radius, centerAngle, sweepAngle, zOffset, color, font, charWorldHeight, isStar) {
-                const charCount = text.length;
-                
-                if (charCount === 0) return;
-
-                const starColor = new THREE.Color(color);
-                
-                const angleStep = sweepAngle / charCount;
-
-                for (let i = 0; i < charCount; i++) {
-                    const currentAngle = centerAngle - (sweepAngle / 2) + (i * angleStep) + (angleStep / 2);
-
-                    if (isStar) {
-                        const starMesh = this.create3DStar(starColor, charWorldHeight);
-                        const depthOffset = starMesh.userData.totalDepth / 2;
-                        starMesh.position.x = radius * Math.cos(currentAngle);
-                        starMesh.position.y = radius * Math.sin(currentAngle);
-                        starMesh.position.z = zOffset - depthOffset * 4;
-                        
-                        starMesh.rotation.z = currentAngle + Math.PI / 2;
-                        
-                        starMesh.userData.pulseTimer = Math.random() * Math.PI * 2;
-                        starMesh.userData.pulseDelay = Math.random() * 2;
-                        this.stars.push(starMesh);
-                        parentGroup.add(starMesh);
-                    } else {
-                        const char = text[i];
-                        const canvas = document.createElement('canvas');
-                        canvas.width = 256;
-                        canvas.height = 256;
-                        const context = canvas.getContext('2d');
-                        
-                        context.fillStyle = 'rgba(0,0,0,0)';
-                        context.fillRect(0, 0, canvas.width, canvas.height);
-                        context.font = font;
-                        context.textAlign = 'center';
-                        context.textBaseline = 'middle';
-                        context.fillStyle = starColor.getStyle();
-                        context.fillText(char, canvas.width / 2, canvas.height / 2);
-
-                        const texture = new THREE.CanvasTexture(canvas);
-                        const material = new THREE.MeshBasicMaterial({
-                            map: texture,
-                            transparent: true,
-                            alphaTest: 0.1,
-                            side: THREE.FrontSide
-                        });
-
-                        const aspectRatio = canvas.width / canvas.height;
-                        const geometry = new THREE.PlaneGeometry(charWorldHeight * aspectRatio, charWorldHeight);
-                        const charMesh = new THREE.Mesh(geometry, material);
-                        
-                        charMesh.position.x = radius * Math.cos(currentAngle);
-                        charMesh.position.y = radius * Math.sin(currentAngle);
-                        charMesh.position.z = zOffset;
-                        charMesh.rotation.z = currentAngle + Math.PI / 2;
-                        
-                        parentGroup.add(charMesh);
-                    }
-                }
-            }
-
-            create3DStar(color, size) {
-                const starShape = new THREE.Shape();
-                const spikes = 5;
-                const outerRadius = size * 0.5;
-                const innerRadius = size * 0.2;
-                
-                for (let i = 0; i < spikes * 2; i++) {
-                    const radius = i % 2 === 0 ? outerRadius : innerRadius;
-                    const angle = (i * Math.PI) / spikes - Math.PI / 2;
-                    const x = Math.cos(angle) * radius;
-                    const y = Math.sin(angle) * radius;
-                    
-                    if (i === 0) {
-                        starShape.moveTo(x, y);
-                    } else {
-                        starShape.lineTo(x, y);
-                    }
-                }
-                starShape.closePath();
-
-                const extrudeDepth = size * 0.15;
-                const bevelThickness = size * 0.03;
-                const totalStarDepth = extrudeDepth + bevelThickness; 
-
-                const extrudeSettings = {
-                    depth: extrudeDepth,
-                    bevelEnabled: true,
-                    bevelThickness: bevelThickness,
-                    bevelSize: size * 0.02,
-                    bevelSegments: 3
-                };
-
-                const geometry = new THREE.ExtrudeGeometry(starShape, extrudeSettings);
-                geometry.translate(0, 0, -totalStarDepth / 2);
-                
-                const material = new THREE.MeshPhongMaterial({
-                    color: color,
-                    emissive: color,
-                    emissiveIntensity: 0.3,
-                    specular: 0xffffff,
-                    shininess: 60,
-                    flatShading: false
-                });
-
-                const starMesh = new THREE.Mesh(geometry, material);
-                starMesh.userData.totalDepth = totalStarDepth;
-                
-                return starMesh;
-            }
-
-generateCurvedTextMesh(parentGroup, textString, radius, startAngle, endAngle, zOffset, color, fontObject, textWorldHeight, characterSpacing = 1.2) {
-    if (!fontObject) {
+      class InteractiveCoin {
+        constructor() {
+        this.scene = null;
+        this.camera = null;
+        this.renderer = null;
+        this.coin = null;
+        this.edgeMesh = null;
+        this.particles = null;
+        this.particlesData = [];
+        this.isFlipped = false;
+        this.isAnimating = false;
+        this.targetRotationX = 0;
+        this.targetRotationY = 0;
+        this.container = document.getElementById('canvas-container');
+        
+        
+        this.simpleEdgeColor = null;
+        
+        this.hoverGlowColor = null;
+        
+        this.currentCoinScale = 1;
+        this.targetCoinScale = 1;
+        this.currentEmissiveColor = null;
+        this.targetEmissiveColor = null;
+        this.currentEmissiveIntensity = 0;
+        this.targetEmissiveIntensity = 0;
+        this.hoverAnimationSpeed = 0.1;
+        
+        this.breathingTimer = 0;
+        this.stars = [];
+        
+        this.isFlipping = false;
+        this.flipStartTime = 0;
+        this.flipDuration = 0;
+        this.flipStartRotationY = 0;
+        this.flipEndRotationY = 0;
+        
+        this.primary_font = null; 
+        
+        this.countTextMesh = null;
+        this.currentCount = 1;
+        this.targetCount = 20;
+        this.countIntervalId = null;
+        
+        this.init();
+        }
+        
+        init() {
+        this.loadAssets().then(() => {
+        
+        this.simpleEdgeColor = new THREE.Color(0x333333);       
+        let cssHoverGlowColor = this.computedStyle('--shadow-hover-blue-light');
+        if (!cssHoverGlowColor) cssHoverGlowColor = '#38bdf8';
+        this.hoverGlowColor = new THREE.Color(cssHoverGlowColor);
+        
+        this.currentEmissiveColor = new THREE.Color(0x000000);
+        this.targetEmissiveColor = new THREE.Color(0x000000);
+        
+        this.flipDuration = parseFloat(this.computedStyle('--flip-duration')) * 1000;
+        
+        this.createScene();
+        this.createCamera();
+        this.createRenderer();
+        this.createLighting();
+        this.createCoin();
+        this.createParticles();
+        this.setupEventListeners();
+        
+        setTimeout(() => {
+        document.getElementById('loading').style.display = 'none';
+        }, 100);
+        
+        this.animate();
+        });
+        }
+        
+        loadAssets() {
+        const fontLoader = new THREE.FontLoader();
+        const primaryFontUrl = 'https://cdn.jsdelivr.net/npm/@compai/font-inter@latest/data/typefaces/normal-800.json';
+        const fallbackFontUrl = 'https://threejs.org/examples/fonts/helvetiker_regular.typeface.json'; 
+        
+        return new Promise((resolve) => {
+        fontLoader.load(primaryFontUrl, (font) => {
+        this.primary_font = font;
+        resolve();
+        }, 
+        () => {}, 
+        (error) => {
+        console.warn("Failed to load primary font (Inter). Attempting fallback font.", error);
+        fontLoader.load(fallbackFontUrl, (font) => {
+        this.primary_font = font;
+        resolve();
+        },
+        () => {},
+        (error) => {
+        console.error("Failed to load fallback font (Helvetiker). Text will not render.", error);
+        this.primary_font = null;
+        resolve();
+        });
+        });
+        });
+        }
+        
+        computedStyle(styVar){
+        return getComputedStyle(document.documentElement).getPropertyValue(styVar).trim();
+        }
+        
+        createScene() {
+        this.scene = new THREE.Scene();
+        this.scene.background = null;
+        }
+        
+        createCamera() {
+        const fov = 45;
+        const aspect = this.container.clientWidth / this.container.clientHeight;
+        this.camera = new THREE.PerspectiveCamera(fov, aspect, 0.1, 1000);
+        this.updateCameraPosition();
+        }
+        
+        createRenderer() {
+        this.renderer = new THREE.WebGLRenderer({ 
+        antialias: true,
+        alpha: true
+        });
+        this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        this.container.appendChild(this.renderer.domElement);
+        }
+        
+        createLighting() {
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        this.scene.add(ambientLight);
+        
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(3, 3, 3);
+        this.scene.add(directionalLight);
+        
+        const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
+        fillLight.position.set(-3, -3, 2);
+        this.scene.add(fillLight);
+        }
+        
+        createCoinEdge(radius, thickness, color) {
+        const edgeGeometry = new THREE.CylinderGeometry(
+        radius,
+        radius,
+        thickness,
+        64,
+        1,
+        true
+        );
+        
+        const edgeMaterial = new THREE.MeshPhongMaterial({
+        color: color,
+        side: THREE.FrontSide,
+        shininess: 30,
+        });
+        
+        const edgeMesh = new THREE.Mesh(edgeGeometry, edgeMaterial);
+        
+        edgeMesh.rotation.x = Math.PI / 2; 
+        
+        return edgeMesh;
+        }
+        
+        createCoin() {
+        const coinGroup = new THREE.Group();
+        
+        const coinRadius = 1.0;
+        const coinThickness = 0.16;
+        const faceZOffset = coinThickness / 2;
+        
+        this.createCoinFaceContent(coinGroup, faceZOffset, false);
+        this.createCoinFaceContent(coinGroup, -faceZOffset, true);
+        
+        this.edgeMesh = this.createCoinEdge(
+        coinRadius, 
+        coinThickness, 
+        this.simpleEdgeColor
+        ); 
+        coinGroup.add(this.edgeMesh);
+        
+        this.coin = coinGroup;
+        this.coin.rotation.x = Math.PI / 2;
+        this.scene.add(this.coin);
+        }
+        
+        createEdgeTexture() {
+        const canvasHeight = 128;
+        const canvasWidth = 512;
+        const segmentHeight = canvasHeight / 3;
+        
+        const canvas = document.createElement('canvas');
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
+        const context = canvas.getContext('2d');
+        
+        const gradients = [
+        ['#9a9a9a', '#7a7a7a', '#5a5a5a', '#7a7a7a', '#9a9a9a'],
+        ['#8a8a8a', '#6a6a6a', '#4a4a4a', '#6a6a6a', '#8a8a8a'],
+        ['#7a7a7a', '#5a5a5a', '#3a3a3a', '#5a5a5a', '#7a7a7a']
+        ];
+        
+        for (let i = 0; i < 3; i++) {
+        const gradient = context.createLinearGradient(0, 0, canvasWidth, 0);
+        gradient.addColorStop(0, gradients[i][0]);
+        gradient.addColorStop(0.3, gradients[i][1]);
+        gradient.addColorStop(0.5, gradients[i][2]);
+        gradient.addColorStop(0.7, gradients[i][3]);
+        gradient.addColorStop(1, gradients[i][4]);
+        context.fillStyle = gradient;
+        context.fillRect(0, i * segmentHeight, canvasWidth, segmentHeight);
+        }
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(2, 1);
+        return texture;
+        }
+        
+        createCoinFaceContent(coinGroup, zPosition, isBack) {
+        const faceContentGroup = new THREE.Group();
+        faceContentGroup.position.z = zPosition;
+        if (isBack) {
+        faceContentGroup.rotation.y = Math.PI;
+        }
+        
+        const faceGeometry = new THREE.CircleGeometry(0.95, 64);
+        const faceTexture = this.createFaceTexture();
+        const faceMaterial = new THREE.MeshPhongMaterial({
+        map: faceTexture,
+        shininess: 60,
+        side: THREE.FrontSide
+        });
+        const face = new THREE.Mesh(faceGeometry, faceMaterial);
+        faceContentGroup.add(face);
+        
+        const outerRingGeometry = new THREE.RingGeometry(0.95, 1.0, 64);
+        const outerRingMaterial = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        side: THREE.FrontSide
+        });
+        const outerRing = new THREE.Mesh(outerRingGeometry, outerRingMaterial);
+        outerRing.position.z = 0.001;
+        faceContentGroup.add(outerRing);
+        
+        this.createInnerContent(faceContentGroup, isBack);
+        this.createCurvedTextElements(faceContentGroup);
+        
+        coinGroup.add(faceContentGroup);
+        }
+        
+        createFaceTexture() {
+        const canvasSize = 512;
+        const canvas = document.createElement('canvas');
+        canvas.width = canvasSize;
+        canvas.height = canvasSize;
+        const context = canvas.getContext('2d');
+        
+        const gradient = context.createLinearGradient(0, 0, 0, canvasSize);
+        gradient.addColorStop(0, this.computedStyle('--coin-gradient-start'));
+        gradient.addColorStop(0.634, this.computedStyle('--coin-gradient-start'));
+        gradient.addColorStop(0.634, this.computedStyle('--coin-gradient-end'));
+        gradient.addColorStop(1, this.computedStyle('--coin-gradient-end'));
+        
+        context.fillStyle = gradient;
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        
+        const arrowFillColor = this.computedStyle('--text-color-dark');
+        const arrowStrokeColor = 'white';
+        const arrowStrokeWidth = 9;
+        const svgViewboxSize = 380;
+        const s = canvasSize / svgViewboxSize;
+        
+        const drawArrowShape = (ctx) => {
+        ctx.beginPath();
+        ctx.moveTo(5 * s, 229 * s);
+        ctx.lineTo(42 * s, 271 * s);
+        ctx.lineTo(93 * s, 252 * s);
+        ctx.closePath();
+        ctx.fillStyle = arrowFillColor;
+        ctx.fill();
+        
+        ctx.beginPath();
+        ctx.moveTo(5 * s, 232 * s);
+        ctx.lineTo(43 * s, 271 * s);
+        ctx.lineTo(83 * s, 252 * s);
+        ctx.strokeStyle = arrowStrokeColor;
+        ctx.lineWidth = arrowStrokeWidth * s;
+        ctx.lineJoin = 'miter';
+        ctx.lineCap = 'butt';
+        ctx.stroke();
+        };
+        
+        context.save();
+        context.translate(46 * s, 262 * s);
+        context.rotate(-18 * (Math.PI / 180));
+        context.translate(-42 * s, -262 * s);
+        drawArrowShape(context);
+        context.restore();
+        
+        context.save();
+        context.translate(canvasSize, 0);
+        context.scale(-1, 1);
+        context.translate(46 * s, 262 * s);
+        context.rotate(-18 * (Math.PI / 180));
+        context.translate(-42 * s, -262 * s);
+        drawArrowShape(context);
+        context.restore();
+        
+        return new THREE.CanvasTexture(canvas);
+        }
+        
+        createCentralText(text, x, yOffset, zOffset, color, size, fontObject, bevelOptions = {}) {
+        if (!fontObject) {
+        console.warn("Font not loaded. Skipping text creation for:", text);
+        return null; 
+        }
+        
+        const textColor = new THREE.Color(color);
+        
+        const height = size * 0.15;
+        const bevelThickness = bevelOptions.bevelThickness || size * 0.03;
+        const totalDepth = height + bevelThickness;
+        const zTranslate = -totalDepth / 2;
+        
+        const textGeometry = new THREE.TextGeometry(text, {
+        font: fontObject,
+        size: size,
+        height: height,
+        curveSegments: 8,
+        bevelEnabled: true,
+        bevelThickness: bevelThickness,
+        bevelSize: bevelOptions.bevelSize || size * 0.02,
+        bevelSegments: bevelOptions.bevelSegments || 3
+        });
+        
+        textGeometry.computeBoundingBox();
+        textGeometry.center();
+        textGeometry.translate(0, 0, zTranslate);
+        
+        const material = new THREE.MeshPhongMaterial({
+        color: textColor,
+        specular: 0xffffff,
+        shininess: 60,
+        flatShading: false
+        });
+        
+        const textMesh = new THREE.Mesh(textGeometry, material);
+        textMesh.position.set(x, yOffset, zOffset); 
+        
+        return textMesh;
+        }
+        
+        createInnerContent(parentGroup, isBack) {
+        const innerGroup = new THREE.Group();
+        innerGroup.position.z = 0.002;
+        
+        const innerContentRadius = 0.5789;
+        const innerBorderWidth = 4 / 190;
+        
+        const innerCircleGeometry = new THREE.CircleGeometry(innerContentRadius, 64);
+        const innerCircleMaterial = new THREE.MeshPhongMaterial({
+        color: new THREE.Color(this.computedStyle('--inner-content-bg-light')),
+        shininess: 50,
+        specular: 0xaaaaaa,
+        side: THREE.FrontSide
+        });
+        const innerCircle = new THREE.Mesh(innerCircleGeometry, innerCircleMaterial);
+        innerGroup.add(innerCircle);
+        
+        const innerBorderGeometry = new THREE.RingGeometry(innerContentRadius - innerBorderWidth, innerContentRadius + innerBorderWidth, 32);
+        const innerBorderMaterial = new THREE.MeshPhongMaterial({
+        color: new THREE.Color(this.computedStyle('--inner-content-border')),
+        shininess: 30,
+        side: THREE.FrontSide
+        });
+        const innerBorder = new THREE.Mesh(innerBorderGeometry, innerBorderMaterial);
+        innerBorder.position.z = 0.001;
+        innerGroup.add(innerBorder);
+        
+        const textColorDark = this.computedStyle('--text-color-dark');
+        
+        let initialText = this.currentCount.toString();
+        let shouldStartAnimation = false;
+        
+        if (isBack) {
+        initialText = this.targetCount.toString();
+        } else {
+        initialText = '1';
+        shouldStartAnimation = true;
+        }
+        
+        const centralTextMesh = this.createCentralText(initialText, 0, 0.21, 0.05, textColorDark, 0.42, this.primary_font, {
+        bevelThickness: 0.008,
+        bevelSize: 0.005,
+        bevelSegments: 4
+        });
+        
+        if (centralTextMesh) {
+        if (shouldStartAnimation) {
+        this.countTextMesh = centralTextMesh;
+        }
+        innerGroup.add(centralTextMesh);
+        }
+        
+        if (shouldStartAnimation) {
+        this.startCountAnimation(innerGroup);
+        }
+        
+        const yearsText = this.createCentralText("YEARS", 0, -0.12, 0.04, textColorDark, 0.14, this.primary_font, {
+        bevelThickness: 0.005,
+        bevelSize: 0.003,
+        bevelSegments: 3
+        });
+        if (yearsText) innerGroup.add(yearsText);
+        
+        const syText = this.createCentralText("SYLHET &", 0, -0.26, 0.03, textColorDark, 0.065, this.primary_font, {
+        bevelThickness: 0.003,
+        bevelSize: 0.002,
+        bevelSegments: 2
+        });
+        if (syText) innerGroup.add(syText);
+        
+        const surroundingText = this.createCentralText("SURROUNDING", 0, -0.36, 0.02, textColorDark, 0.065, this.primary_font, {
+        bevelThickness: 0.003,
+        bevelSize: 0.002,
+        bevelSegments: 2
+        });
+        if (surroundingText) innerGroup.add(surroundingText);
+        
+        const areasText = this.createCentralText("AREAS", 0, -0.46, 0.01, textColorDark, 0.065, this.primary_font, {
+        bevelThickness: 0.003,
+        bevelSize: 0.002,
+        bevelSegments: 2
+        });
+        if (areasText) innerGroup.add(areasText);
+        
+        parentGroup.add(innerGroup);
+        }
+        
+        startCountAnimation(parentGroupForCountText) {
+        if (!this.primary_font) {
+        console.warn("Font not loaded, cannot start count animation.");
+        return;
+        }
+        
+        this.currentCount = 1;
+        const animationDuration = 3000;
+        const totalIncrements = this.targetCount - this.currentCount;
+        const intervalTime = animationDuration / totalIncrements;
+        
+        this.countIntervalId = setInterval(() => {
+        if (this.currentCount < this.targetCount) {
+        this.currentCount++;
+        this.updateCountTextMesh(parentGroupForCountText);
+        } else {
+        clearInterval(this.countIntervalId);
+        this.countIntervalId = null;
+        }
+        }, intervalTime);
+        }
+        
+        
+        updateCountTextMesh(parentGroupForCountText) {
+        if (!this.countTextMesh || !this.primary_font) {
+        return;
+        }
+        
+        parentGroupForCountText.remove(this.countTextMesh);
+        
+        if (this.countTextMesh.geometry) {
+        this.countTextMesh.geometry.dispose();
+        }
+        if (this.countTextMesh.material) {
+        this.countTextMesh.material.dispose();
+        }
+        this.countTextMesh = null; 
+        
+        const textColorDark = this.computedStyle('--text-color-dark');
+        const newTextMesh = this.createCentralText(this.currentCount.toString(), 0, 0.21, 0.05, textColorDark, 0.42, this.primary_font, {
+        bevelThickness: 0.008,
+        bevelSize: 0.005,
+        bevelSegments: 4
+        });
+        
+        if (newTextMesh) {
+        this.countTextMesh = newTextMesh;
+        parentGroupForCountText.add(this.countTextMesh);
+        }
+        }
+        
+        createCurvedTextElements(faceContentGroup) {
+        const topText = "20 YEARS SYLHET & SURROUNDING AREAS";
+        const bottomStarsText = "\uF005\uF005\uF005\uF005\uF005"; 
+        
+        const topTextRadius = 0.765; 
+        const bottomStarsRadius = 0.7263; 
+        
+        const topTextStartAngle = Math.PI * (160 / 180); 
+        const topTextEndAngle = Math.PI * (25 / 180);   
+        
+        this.generateCurvedTextMesh(
+        faceContentGroup, 
+        topText, 
+        topTextRadius, 
+        topTextStartAngle,
+        topTextEndAngle,
+        0.05,
+        new THREE.Color(this.computedStyle('--text-color-light')).getHex(), 
+        this.primary_font, 
+        0.32,
+        1.2
+        );
+        
+        this.generateCurvedCharacterMeshes(
+        faceContentGroup, 
+        bottomStarsText, 
+        bottomStarsRadius, 
+        Math.PI * 1.5,
+        Math.PI * 0.45,
+        0.06,
+        new THREE.Color(this.computedStyle('--star-color-default')).getHex(), 
+        '900 90px "Font Awesome 6 Free"',
+        0.11,
+        true
+        );
+        }
+        
+        generateCurvedCharacterMeshes(parentGroup, text, radius, centerAngle, sweepAngle, zOffset, color, font, charWorldHeight, isStar) {
+        const charCount = text.length;
+        
+        if (charCount === 0) return;
+        
+        const starColor = new THREE.Color(color);
+        
+        const angleStep = sweepAngle / charCount;
+        
+        for (let i = 0; i < charCount; i++) {
+        const currentAngle = centerAngle - (sweepAngle / 2) + (i * angleStep) + (angleStep / 2);
+        
+        if (isStar) {
+        const starMesh = this.create3DStar(starColor, charWorldHeight);
+        const depthOffset = starMesh.userData.totalDepth / 2;
+        starMesh.position.x = radius * Math.cos(currentAngle);
+        starMesh.position.y = radius * Math.sin(currentAngle);
+        starMesh.position.z = zOffset - depthOffset * 4;
+        
+        starMesh.rotation.z = currentAngle + Math.PI / 2;
+        
+        starMesh.userData.pulseTimer = Math.random() * Math.PI * 2;
+        starMesh.userData.pulseDelay = Math.random() * 2;
+        this.stars.push(starMesh);
+        parentGroup.add(starMesh);
+        } else {
+        const char = text[i];
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 256;
+        const context = canvas.getContext('2d');
+        
+        context.fillStyle = 'rgba(0,0,0,0)';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.font = font;
+        context.textAlign = 'center';
+        context.textBaseline = 'middle';
+        context.fillStyle = starColor.getStyle();
+        context.fillText(char, canvas.width / 2, canvas.height / 2);
+        
+        const texture = new THREE.CanvasTexture(canvas);
+        const material = new THREE.MeshBasicMaterial({
+        map: texture,
+        transparent: true,
+        alphaTest: 0.1,
+        side: THREE.FrontSide
+        });
+        
+        const aspectRatio = canvas.width / canvas.height;
+        const geometry = new THREE.PlaneGeometry(charWorldHeight * aspectRatio, charWorldHeight);
+        const charMesh = new THREE.Mesh(geometry, material);
+        
+        charMesh.position.x = radius * Math.cos(currentAngle);
+        charMesh.position.y = radius * Math.sin(currentAngle);
+        charMesh.position.z = zOffset;
+        charMesh.rotation.z = currentAngle + Math.PI / 2;
+        
+        parentGroup.add(charMesh);
+        }
+        }
+        }
+        
+        create3DStar(color, size) {
+        const starShape = new THREE.Shape();
+        const spikes = 5;
+        const outerRadius = size * 0.5;
+        const innerRadius = size * 0.2;
+        
+        for (let i = 0; i < spikes * 2; i++) {
+        const radius = i % 2 === 0 ? outerRadius : innerRadius;
+        const angle = (i * Math.PI) / spikes - Math.PI / 2;
+        const x = Math.cos(angle) * radius;
+        const y = Math.sin(angle) * radius;
+        
+        if (i === 0) {
+        starShape.moveTo(x, y);
+        } else {
+        starShape.lineTo(x, y);
+        }
+        }
+        starShape.closePath();
+        
+        const extrudeDepth = size * 0.15;
+        const bevelThickness = size * 0.03;
+        const totalStarDepth = extrudeDepth + bevelThickness; 
+        
+        const extrudeSettings = {
+        depth: extrudeDepth,
+        bevelEnabled: true,
+        bevelThickness: bevelThickness,
+        bevelSize: size * 0.02,
+        bevelSegments: 3
+        };
+        
+        const geometry = new THREE.ExtrudeGeometry(starShape, extrudeSettings);
+        geometry.translate(0, 0, -totalStarDepth / 2);
+        
+        const material = new THREE.MeshPhongMaterial({
+        color: color,
+        emissive: color,
+        emissiveIntensity: 0.3,
+        specular: 0xffffff,
+        shininess: 60,
+        flatShading: false
+        });
+        
+        const starMesh = new THREE.Mesh(geometry, material);
+        starMesh.userData.totalDepth = totalStarDepth;
+        
+        return starMesh;
+        }
+        
+        generateCurvedTextMesh(parentGroup, textString, radius, startAngle, endAngle, zOffset, color, fontObject, textWorldHeight, characterSpacing = 1.2) {
+        if (!fontObject) {
         console.warn("Font not loaded. Skipping curved text creation for:", textString);
         return;
-    }
-    
-    const textColor = new THREE.Color(color);
-    const textGroup = new THREE.Group();
-    
-    const sizeFactor = 0.25; 
-    
-    const extrusionHeight = textWorldHeight * 0.08;
-    const bevelThickness = textWorldHeight * 0.015;
-    
-    const totalDepth = extrusionHeight + bevelThickness;
-    
-    const intendedStartAngleRad = startAngle;
-    const intendedEndAngleRad = endAngle;
-
-    let accumulatedAngle = 0;
-    let lastCharHalfWidth = 0;
-    
-    const depthOffsetForFlush = totalDepth / 2;
-    
-    for (let i = 0; i < textString.length; i++) {
+        }
+        
+        const textColor = new THREE.Color(color);
+        const textGroup = new THREE.Group();
+        
+        const sizeFactor = 0.25; 
+        
+        const extrusionHeight = textWorldHeight * 0.08;
+        const bevelThickness = textWorldHeight * 0.015;
+        
+        const totalDepth = extrusionHeight + bevelThickness;
+        
+        const intendedStartAngleRad = startAngle;
+        const intendedEndAngleRad = endAngle;
+        
+        let accumulatedAngle = 0;
+        let lastCharHalfWidth = 0;
+        
+        const depthOffsetForFlush = totalDepth / 2;
+        
+        for (let i = 0; i < textString.length; i++) {
         const char = textString[i];
         
         if (char === ' ') {
-            const desiredSpaceWidth = (textWorldHeight * 0.05);
-            const angularChange = (lastCharHalfWidth + desiredSpaceWidth) / radius;
-            accumulatedAngle += angularChange;
-            lastCharHalfWidth = desiredSpaceWidth;
-            continue;
+        const desiredSpaceWidth = (textWorldHeight * 0.05);
+        const angularChange = (lastCharHalfWidth + desiredSpaceWidth) / radius;
+        accumulatedAngle += angularChange;
+        lastCharHalfWidth = desiredSpaceWidth;
+        continue;
         }
         
         const textGeometry = new THREE.TextGeometry(char, {
-            font: fontObject,
-            size: textWorldHeight * sizeFactor,
-            height: extrusionHeight,
-            curveSegments: 12,
-            bevelEnabled: true,
-            bevelThickness: bevelThickness,
-            bevelSize: textWorldHeight * 0.01,
-            bevelSegments: 5
+        font: fontObject,
+        size: textWorldHeight * sizeFactor,
+        height: extrusionHeight,
+        curveSegments: 12,
+        bevelEnabled: true,
+        bevelThickness: bevelThickness,
+        bevelSize: textWorldHeight * 0.01,
+        bevelSegments: 5
         });
         
         textGeometry.computeBoundingBox();
@@ -868,14 +868,14 @@ generateCurvedTextMesh(parentGroup, textString, radius, startAngle, endAngle, zO
         const charAngle = intendedStartAngleRad - accumulatedAngle;
         
         const material = new THREE.MeshPhongMaterial({
-            color: textColor,
-            specular: 0xffffff,
-            shininess: 50,
-            flatShading: false
+        color: textColor,
+        specular: 0xffffff,
+        shininess: 50,
+        flatShading: false
         });
         
         textGeometry.center();
-
+        
         const charMesh = new THREE.Mesh(textGeometry, material);
         
         charMesh.position.x = radius * Math.cos(charAngle);
@@ -886,328 +886,328 @@ generateCurvedTextMesh(parentGroup, textString, radius, startAngle, endAngle, zO
         charMesh.rotation.z = charAngle - Math.PI / 2;
         
         textGroup.add(charMesh);
-
+        
         lastCharHalfWidth = charHalfWidth;
-    }
-    
-    const intendedTotalSpan = intendedStartAngleRad - intendedEndAngleRad;
-    const actualConsumedAngle = accumulatedAngle - (lastCharHalfWidth / radius);
-    const rotationShift = (intendedTotalSpan - actualConsumedAngle) / 2;
-    textGroup.rotation.z = -rotationShift;
-    
-    parentGroup.add(textGroup);
-}
-
-            
-            createParticles() {
-                const particleCount = 50;
-                const particlesGeometry = new THREE.BufferGeometry();
-                const positions = new Float32Array(particleCount * 3);
-                const sizes = new Float32Array(particleCount);
-                const colors = new Float32Array(particleCount * 3);
-
-                for (let i = 0; i < particleCount; i++) {
-                    const i3 = i * 3;
-                    const radius = 1.1 + Math.random() * 0.2;
-                    const angle = Math.random() * Math.PI * 2;
-                    
-                    const startX = Math.cos(angle) * radius;
-                    const startY = Math.sin(angle) * radius;
-                    const startZ = (Math.random() - 0.5) * 0.1; 
-
-                    positions[i3] = startX;
-                    positions[i3 + 1] = startY;
-                    positions[i3 + 2] = startZ;
-                    sizes[i] = 0.01 + Math.random() * 0.03;
-
-                    colors[i3] = 1.0;
-                    colors[i3 + 1] = 1.0;
-                    colors[i3 + 2] = 1.0;
-
-                    this.particlesData.push({
-                        initialX: startX,
-                        initialY: startY,
-                        initialZ: startZ,
-                        currentY: startY,
-                        velocity: 0.005 + Math.random() * 0.005,
-                        rotationSpeed: (Math.random() - 0.5) * 0.05,
-                        life: Math.random() * 3,
-                        maxLife: 3 + Math.random() * 2
-                    });
-                }
-
-                particlesGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-                particlesGeometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
-                particlesGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-                const particleMaterial = new THREE.ShaderMaterial({
-                    uniforms: {
-                        pointTexture: { value: new THREE.TextureLoader().load('https://threejs.org/examples/textures/sprites/disc.png') }
-                    },
-                    vertexShader: `
-                        attribute float size;
-                        attribute vec3 color;
-                        varying vec3 vColor;
-                        void main() {
-                            vColor = color;
-                            vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
-                            gl_PointSize = size * ( 300.0 / -mvPosition.z );
-                            gl_Position = projectionMatrix * mvPosition;
-                        }
-                    `,
-                    fragmentShader: `
-                        uniform sampler2D pointTexture;
-                        varying vec3 vColor;
-                        void main() {
-                            gl_FragColor = vec4( vColor, vColor.r ) * texture2D( pointTexture, gl_PointCoord );
-                        }
-                    `,
-                    transparent: true,
-                    blending: THREE.AdditiveBlending,
-                    depthWrite: false,
-                });
-
-                this.particles = new THREE.Points(particlesGeometry, particleMaterial);
-                this.particles.rotation.x = Math.PI / 2; 
-                this.scene.add(this.particles);
-            }
-
-            setupEventListeners() {
-                const canvas = this.renderer.domElement;
-                
-                const onPointerMove = (event) => {
-                    if (this.isAnimating) return; 
-                    
-                    const rect = canvas.getBoundingClientRect();
-                    let clientX, clientY;
-
-                    if (event.touches && event.touches.length > 0) {
-                        clientX = event.touches[0].clientX;
-                        clientY = event.touches[0].clientY;
-                    } else {
-                        clientX = event.clientX;
-                        clientY = event.clientY;
-                    }
-
-                    const x = ((clientX - rect.left) / rect.width) * 2 - 1;
-                    const y = -((clientY - rect.top) / rect.height) * 2 + 1; 
-
-                    this.targetRotationY = x * 0.3;
-                    this.targetRotationX = y * 0.3;
-                };
-
-                const onPointerEnter = () => {
-                    if (this.isAnimating || 'ontouchstart' in window) return; 
-                    this.targetCoinScale = 1.05;
-                    this.targetEdgeColor.copy(this.hoverEdgeColor);
-                    this.targetEmissiveColor.copy(this.hoverGlowColor);
-                    this.targetEmissiveIntensity = 0.5;
-                };
-
-                const onPointerLeave = () => {
-                    if (this.isAnimating || 'ontouchstart' in window) return;
-                    this.targetCoinScale = 1;
-                    this.targetEdgeColor.copy(this.defaultEdgeColor);
-                    this.targetEmissiveColor.set(0x000000);
-                    this.targetEmissiveIntensity = 0;
-                    this.targetRotationX = 0; 
-                    this.targetRotationY = 0;
-                };
-
-                const onPointerClick = (event) => {
-                    if (this.isAnimating) return;
-                    this.createClickRipple(event); 
-                    this.flipCoin();
-                };
-
-                canvas.addEventListener('mousemove', onPointerMove);
-                canvas.addEventListener('mouseenter', onPointerEnter);
-                canvas.addEventListener('mouseleave', onPointerLeave);
-                canvas.addEventListener('click', onPointerClick);
-
-                canvas.addEventListener('touchmove', onPointerMove, { passive: true });
-                canvas.addEventListener('touchstart', (event) => {
-                    if (this.isAnimating) return;
-                    this.targetCoinScale = 1.05;
-                }, { passive: true }); 
-                canvas.addEventListener('touchend', (event) => {
-                    if (this.isAnimating) return;
-                    this.targetCoinScale = 1;
-                    this.targetRotationX = 0; 
-                    this.targetRotationY = 0;
-                }, { passive: true }); 
-                
-                window.addEventListener('resize', () => this.onWindowResize());
-            }
-
-            createClickRipple(event) {
-                const ripple = document.createElement('div');
-                ripple.className = 'click-ripple';
-                
-                const rect = this.container.getBoundingClientRect();
-                let clientX, clientY;
-
-                if (event.touches && event.touches.length > 0) {
-                    clientX = event.touches[0].clientX;
-                    clientY = event.touches[0].clientY;
-                } else {
-                    clientX = event.clientX;
-                    clientY = event.clientY;
-                }
-
-                ripple.style.left = `${clientX - rect.left}px`;
-                ripple.style.top = `${clientY - rect.top}px`;
-                
-                this.container.appendChild(ripple);
-                ripple.style.animation = 'ripple 0.8s forwards'; 
-                
-                setTimeout(() => {
-                    if (ripple.parentNode) {
-                        ripple.parentNode.removeChild(ripple);
-                    }
-                }, 800);
-            }
-
-            flipCoin() {
-                if (this.isFlipping) return;
-                this.isFlipping = true;
-                this.isAnimating = true;
-
-                this.flipStartTime = performance.now();
-                this.flipStartRotationY = this.coin.rotation.y;
-                const rotationAmount = Math.PI;
-                this.flipEndRotationY = this.coin.rotation.y + rotationAmount;
-
-                this.targetEdgeColor.copy(this.defaultEdgeColor);
-                this.targetEmissiveColor.set(0x000000);
-                this.targetEmissiveIntensity = 0;
-            }
-
-            onWindowResize() {
-                this.camera.aspect = this.container.clientWidth / this.container.clientHeight;
-                this.camera.updateProjectionMatrix();
-                this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
-                this.updateCameraPosition();
-            }
-
-            updateCameraPosition() {
-                const coinWorldDiameter = 2.0;
-                const targetCoinCoverage = 0.9;
-                
-                const fovRad = this.camera.fov * Math.PI / 180;
-
-                let distance;
-                if (this.camera.aspect >= 1) { 
-                    distance = coinWorldDiameter / (targetCoinCoverage * 2 * Math.tan(fovRad / 2));
-                } else { 
-                    const hfovRad = 2 * Math.atan(Math.tan(fovRad / 2) * this.camera.aspect);
-                    distance = coinWorldDiameter / (targetCoinCoverage * 2 * Math.tan(hfovRad / 2));
-                }
-
-                this.camera.position.z = distance * 1.05;
-                this.camera.lookAt(0, 0, 0); 
-            }
-
-
-            animate() {
-                requestAnimationFrame(() => this.animate());
-
-                this.breathingTimer += 0.02; 
-                const breathingScaleFactor = 1 + Math.sin(this.breathingTimer) * 0.03; 
-                
-                if (!this.isFlipping) {
-                    this.currentCoinScale += (this.targetCoinScale - this.currentCoinScale) * this.hoverAnimationSpeed;
-                    this.coin.scale.set(this.currentCoinScale * breathingScaleFactor, this.currentCoinScale * breathingScaleFactor, this.currentCoinScale * breathingScaleFactor);
-
-
-                    this.coin.rotation.x += (this.targetRotationX - this.coin.rotation.x) * 0.1;
-                    this.coin.rotation.y += (this.targetRotationY - this.coin.rotation.y) * 0.1;
-                } else {
-                    this.coin.scale.set(breathingScaleFactor, breathingScaleFactor, breathingScaleFactor);
-                }
-
-
-                const WHITE = new THREE.Color(0xFFFFFF);
-                let cssStarHoverColor = this.computedStyle('--star-color-hover');
-                if (!cssStarHoverColor) cssStarHoverColor = '#ffd700';
-                const GOLD = new THREE.Color(cssStarHoverColor);
-
-                this.stars.forEach(starMesh => {
-                    if (starMesh.userData.pulseDelay > 0) {
-                        starMesh.userData.pulseDelay -= 0.016;
-                        return;
-                    }
-                    starMesh.userData.pulseTimer += 0.01;
-                    const pulseFactor = (Math.sin(starMesh.userData.pulseTimer) + 1) / 2;
-
-                    starMesh.material.color.lerpColors(WHITE, GOLD, pulseFactor);
-                    starMesh.material.emissive.lerpColors(WHITE, GOLD, pulseFactor);
-                    starMesh.material.emissiveIntensity = 0.3 + pulseFactor * 0.7;
-                });
-
-                if (this.isFlipping) {
-                    const elapsedTime = performance.now() - this.flipStartTime;
-                    const progress = Math.min(elapsedTime / this.flipDuration, 1);
-                    
-                    const easedProgress = progress < 0.5
-                        ? 4 * progress * progress * progress
-                        : 1 - Math.pow(-2 * progress + 2, 3) / 2;
-
-                    this.coin.rotation.y = this.flipStartRotationY + (this.flipEndRotationY - this.flipStartRotationY) * easedProgress;
-
-                    if (progress >= 1) {
-                        this.isFlipping = false;
-                        this.isAnimating = false;
-                        this.isFlipped = !this.isFlipped;
-                        this.coin.rotation.y %= (Math.PI * 2);
-                        this.targetRotationX = 0;
-                        this.targetRotationY = 0;
-                    }
-                }
-
-                if (this.particles) {
-                    const positions = this.particles.geometry.attributes.position.array;
-                    const colors = this.particles.geometry.attributes.color.array;
-
-                    for (let i = 0; i < this.particlesData.length; i++) {
-                        const p = this.particlesData[i];
-                        const i3 = i * 3;
-
-                        p.life += 0.016;
-
-                        if (p.life > p.maxLife) {
-                            p.life = 0;
-                            const radius = 1.1 + Math.random() * 0.2;
-                            const angle = Math.random() * Math.PI * 2;
-                            p.initialX = Math.cos(angle) * radius;
-                            p.initialY = Math.sin(angle) * radius;
-                            p.initialZ = (Math.random() - 0.5) * 0.1;
-                            p.currentY = p.initialY;
-                        }
-
-                        positions[i3] = p.initialX;
-                        p.currentY = p.initialY + (p.life / p.maxLife) * 0.3;
-                        positions[i3 + 1] = p.currentY;
-                        positions[i3 + 2] = p.initialZ + Math.sin(p.life * p.rotationSpeed) * 0.05;
-
-                        const opacity = 1 - (p.life / p.maxLife);
-                        colors[i3] = opacity;
-                        colors[i3 + 1] = opacity;
-                        colors[i3 + 2] = opacity;
-                    }
-                    this.particles.geometry.attributes.position.needsUpdate = true;
-                    this.particles.geometry.attributes.color.needsUpdate = true;
-                }
-
-                this.renderer.render(this.scene, this.camera);
-            }
         }
-
-        window.addEventListener('load', () => {
-            setTimeout(() => {
-                new InteractiveCoin();
-            }, 500); 
+        
+        const intendedTotalSpan = intendedStartAngleRad - intendedEndAngleRad;
+        const actualConsumedAngle = accumulatedAngle - (lastCharHalfWidth / radius);
+        const rotationShift = (intendedTotalSpan - actualConsumedAngle) / 2;
+        textGroup.rotation.z = -rotationShift;
+        
+        parentGroup.add(textGroup);
+        }
+        
+        
+        createParticles() {
+        const particleCount = 50;
+        const particlesGeometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(particleCount * 3);
+        const sizes = new Float32Array(particleCount);
+        const colors = new Float32Array(particleCount * 3);
+        
+        for (let i = 0; i < particleCount; i++) {
+        const i3 = i * 3;
+        const radius = 1.1 + Math.random() * 0.2;
+        const angle = Math.random() * Math.PI * 2;
+        
+        const startX = Math.cos(angle) * radius;
+        const startY = Math.sin(angle) * radius;
+        const startZ = (Math.random() - 0.5) * 0.1; 
+        
+        positions[i3] = startX;
+        positions[i3 + 1] = startY;
+        positions[i3 + 2] = startZ;
+        sizes[i] = 0.01 + Math.random() * 0.03;
+        
+        colors[i3] = 1.0;
+        colors[i3 + 1] = 1.0;
+        colors[i3 + 2] = 1.0;
+        
+        this.particlesData.push({
+        initialX: startX,
+        initialY: startY,
+        initialZ: startZ,
+        currentY: startY,
+        velocity: 0.005 + Math.random() * 0.005,
+        rotationSpeed: (Math.random() - 0.5) * 0.05,
+        life: Math.random() * 3,
+        maxLife: 3 + Math.random() * 2
         });
+        }
+        
+        particlesGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        particlesGeometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+        particlesGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        
+        const particleMaterial = new THREE.ShaderMaterial({
+        uniforms: {
+        pointTexture: { value: new THREE.TextureLoader().load('https://threejs.org/examples/textures/sprites/disc.png') }
+        },
+        vertexShader: `
+        attribute float size;
+        attribute vec3 color;
+        varying vec3 vColor;
+        void main() {
+        vColor = color;
+        vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
+        gl_PointSize = size * ( 300.0 / -mvPosition.z );
+        gl_Position = projectionMatrix * mvPosition;
+        }
+        `,
+        fragmentShader: `
+        uniform sampler2D pointTexture;
+        varying vec3 vColor;
+        void main() {
+        gl_FragColor = vec4( vColor, vColor.r ) * texture2D( pointTexture, gl_PointCoord );
+        }
+        `,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        });
+        
+        this.particles = new THREE.Points(particlesGeometry, particleMaterial);
+        this.particles.rotation.x = Math.PI / 2; 
+        this.scene.add(this.particles);
+        }
+        
+        setupEventListeners() {
+        const canvas = this.renderer.domElement;
+        
+        const onPointerMove = (event) => {
+        if (this.isAnimating) return; 
+        
+        const rect = canvas.getBoundingClientRect();
+        let clientX, clientY;
+        
+        if (event.touches && event.touches.length > 0) {
+        clientX = event.touches[0].clientX;
+        clientY = event.touches[0].clientY;
+        } else {
+        clientX = event.clientX;
+        clientY = event.clientY;
+        }
+        
+        const x = ((clientX - rect.left) / rect.width) * 2 - 1;
+        const y = -((clientY - rect.top) / rect.height) * 2 + 1; 
+        
+        this.targetRotationY = x * 0.3;
+        this.targetRotationX = y * 0.3;
+        };
+        
+        const onPointerEnter = () => {
+        if (this.isAnimating || 'ontouchstart' in window) return; 
+        this.targetCoinScale = 1.05;
+        this.targetEdgeColor.copy(this.hoverEdgeColor);
+        this.targetEmissiveColor.copy(this.hoverGlowColor);
+        this.targetEmissiveIntensity = 0.5;
+        };
+        
+        const onPointerLeave = () => {
+        if (this.isAnimating || 'ontouchstart' in window) return;
+        this.targetCoinScale = 1;
+        this.targetEdgeColor.copy(this.defaultEdgeColor);
+        this.targetEmissiveColor.set(0x000000);
+        this.targetEmissiveIntensity = 0;
+        this.targetRotationX = 0; 
+        this.targetRotationY = 0;
+        };
+        
+        const onPointerClick = (event) => {
+        if (this.isAnimating) return;
+        this.createClickRipple(event); 
+        this.flipCoin();
+        };
+        
+        canvas.addEventListener('mousemove', onPointerMove);
+        canvas.addEventListener('mouseenter', onPointerEnter);
+        canvas.addEventListener('mouseleave', onPointerLeave);
+        canvas.addEventListener('click', onPointerClick);
+        
+        canvas.addEventListener('touchmove', onPointerMove, { passive: true });
+        canvas.addEventListener('touchstart', (event) => {
+        if (this.isAnimating) return;
+        this.targetCoinScale = 1.05;
+        }, { passive: true }); 
+        canvas.addEventListener('touchend', (event) => {
+        if (this.isAnimating) return;
+        this.targetCoinScale = 1;
+        this.targetRotationX = 0; 
+        this.targetRotationY = 0;
+        }, { passive: true }); 
+        
+        window.addEventListener('resize', () => this.onWindowResize());
+        }
+        
+        createClickRipple(event) {
+        const ripple = document.createElement('div');
+        ripple.className = 'click-ripple';
+        
+        const rect = this.container.getBoundingClientRect();
+        let clientX, clientY;
+        
+        if (event.touches && event.touches.length > 0) {
+        clientX = event.touches[0].clientX;
+        clientY = event.touches[0].clientY;
+        } else {
+        clientX = event.clientX;
+        clientY = event.clientY;
+        }
+        
+        ripple.style.left = `${clientX - rect.left}px`;
+        ripple.style.top = `${clientY - rect.top}px`;
+        
+        this.container.appendChild(ripple);
+        ripple.style.animation = 'ripple 0.8s forwards'; 
+        
+        setTimeout(() => {
+        if (ripple.parentNode) {
+        ripple.parentNode.removeChild(ripple);
+        }
+        }, 800);
+        }
+        
+        flipCoin() {
+        if (this.isFlipping) return;
+        this.isFlipping = true;
+        this.isAnimating = true;
+        
+        this.flipStartTime = performance.now();
+        this.flipStartRotationY = this.coin.rotation.y;
+        const rotationAmount = Math.PI;
+        this.flipEndRotationY = this.coin.rotation.y + rotationAmount;
+        
+        this.targetEdgeColor.copy(this.defaultEdgeColor);
+        this.targetEmissiveColor.set(0x000000);
+        this.targetEmissiveIntensity = 0;
+        }
+        
+        onWindowResize() {
+        this.camera.aspect = this.container.clientWidth / this.container.clientHeight;
+        this.camera.updateProjectionMatrix();
+        this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
+        this.updateCameraPosition();
+        }
+        
+        updateCameraPosition() {
+        const coinWorldDiameter = 2.0;
+        const targetCoinCoverage = 0.9;
+        
+        const fovRad = this.camera.fov * Math.PI / 180;
+        
+        let distance;
+        if (this.camera.aspect >= 1) { 
+        distance = coinWorldDiameter / (targetCoinCoverage * 2 * Math.tan(fovRad / 2));
+        } else { 
+        const hfovRad = 2 * Math.atan(Math.tan(fovRad / 2) * this.camera.aspect);
+        distance = coinWorldDiameter / (targetCoinCoverage * 2 * Math.tan(hfovRad / 2));
+        }
+        
+        this.camera.position.z = distance * 1.05;
+        this.camera.lookAt(0, 0, 0); 
+        }
+        
+        
+        animate() {
+        requestAnimationFrame(() => this.animate());
+        
+        this.breathingTimer += 0.02; 
+        const breathingScaleFactor = 1 + Math.sin(this.breathingTimer) * 0.03; 
+        
+        if (!this.isFlipping) {
+        this.currentCoinScale += (this.targetCoinScale - this.currentCoinScale) * this.hoverAnimationSpeed;
+        this.coin.scale.set(this.currentCoinScale * breathingScaleFactor, this.currentCoinScale * breathingScaleFactor, this.currentCoinScale * breathingScaleFactor);
+        
+        
+        this.coin.rotation.x += (this.targetRotationX - this.coin.rotation.x) * 0.1;
+        this.coin.rotation.y += (this.targetRotationY - this.coin.rotation.y) * 0.1;
+        } else {
+        this.coin.scale.set(breathingScaleFactor, breathingScaleFactor, breathingScaleFactor);
+        }
+        
+        
+        const WHITE = new THREE.Color(0xFFFFFF);
+        let cssStarHoverColor = this.computedStyle('--star-color-hover');
+        if (!cssStarHoverColor) cssStarHoverColor = '#ffd700';
+        const GOLD = new THREE.Color(cssStarHoverColor);
+        
+        this.stars.forEach(starMesh => {
+        if (starMesh.userData.pulseDelay > 0) {
+        starMesh.userData.pulseDelay -= 0.016;
+        return;
+        }
+        starMesh.userData.pulseTimer += 0.01;
+        const pulseFactor = (Math.sin(starMesh.userData.pulseTimer) + 1) / 2;
+        
+        starMesh.material.color.lerpColors(WHITE, GOLD, pulseFactor);
+        starMesh.material.emissive.lerpColors(WHITE, GOLD, pulseFactor);
+        starMesh.material.emissiveIntensity = 0.3 + pulseFactor * 0.7;
+        });
+        
+        if (this.isFlipping) {
+        const elapsedTime = performance.now() - this.flipStartTime;
+        const progress = Math.min(elapsedTime / this.flipDuration, 1);
+        
+        const easedProgress = progress < 0.5
+        ? 4 * progress * progress * progress
+        : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+        
+        this.coin.rotation.y = this.flipStartRotationY + (this.flipEndRotationY - this.flipStartRotationY) * easedProgress;
+        
+        if (progress >= 1) {
+        this.isFlipping = false;
+        this.isAnimating = false;
+        this.isFlipped = !this.isFlipped;
+        this.coin.rotation.y %= (Math.PI * 2);
+        this.targetRotationX = 0;
+        this.targetRotationY = 0;
+        }
+        }
+        
+        if (this.particles) {
+        const positions = this.particles.geometry.attributes.position.array;
+        const colors = this.particles.geometry.attributes.color.array;
+        
+        for (let i = 0; i < this.particlesData.length; i++) {
+        const p = this.particlesData[i];
+        const i3 = i * 3;
+        
+        p.life += 0.016;
+        
+        if (p.life > p.maxLife) {
+        p.life = 0;
+        const radius = 1.1 + Math.random() * 0.2;
+        const angle = Math.random() * Math.PI * 2;
+        p.initialX = Math.cos(angle) * radius;
+        p.initialY = Math.sin(angle) * radius;
+        p.initialZ = (Math.random() - 0.5) * 0.1;
+        p.currentY = p.initialY;
+        }
+        
+        positions[i3] = p.initialX;
+        p.currentY = p.initialY + (p.life / p.maxLife) * 0.3;
+        positions[i3 + 1] = p.currentY;
+        positions[i3 + 2] = p.initialZ + Math.sin(p.life * p.rotationSpeed) * 0.05;
+        
+        const opacity = 1 - (p.life / p.maxLife);
+        colors[i3] = opacity;
+        colors[i3 + 1] = opacity;
+        colors[i3 + 2] = opacity;
+        }
+        this.particles.geometry.attributes.position.needsUpdate = true;
+        this.particles.geometry.attributes.color.needsUpdate = true;
+        }
+        
+        this.renderer.render(this.scene, this.camera);
+        }
+        }
+        
+        window.addEventListener('load', () => {
+        setTimeout(() => {
+        new InteractiveCoin();
+        }, 500); 
+    });
     </script>
 </body>
 </html>
