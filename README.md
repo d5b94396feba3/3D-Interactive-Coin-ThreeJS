@@ -20,10 +20,6 @@ A beautiful, interactive 3D flipping coin with smooth animations, particle effec
 
 Simply open `index.html` in your browser to see the coin in action!
 
-## 📄 License
-
-MIT License - feel free to use in your projects!
-
 ---
 
 **Star this repo if you find it helpful!** ⭐
